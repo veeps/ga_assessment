@@ -4,6 +4,8 @@ library(tidyr)
 library(janitor)
 library(ggplot2)
 library(stringr)
+library(useful)
+library(coefplot)
 
 kickstarter <- read_csv("data/DSI_kickstarterscrape_dataset.csv",col_names =  TRUE)
 kickstarter <- kickstarter %>%
@@ -33,6 +35,10 @@ class(kickstarter$duration)
 ggplot(data=kickstarter, aes(kickstarter$duration)) + 
   geom_histogram(binwidth = 5) 
 
+ggplot(kickstarter, aes(x=duration)) +
+  geom_density(fill="grey", color ="grey") +
+  scale_x_continuous()
+
 
 # What's the best length of time to run a campaign?
 
@@ -57,8 +63,44 @@ kickstarter_completed <- kickstarter %>%
   mutate(status_binary = ifelse(status== "successful", 1, 0 ))
 
 cor(kickstarter_completed$duration, kickstarter_completed$status_binary) 
-logistic_simple <- glm(duration ~ status_binary, family ="poisson", data = kickstarter_completed) %>%
+
+
+logistic_regression <- glm(status_binary ~ duration + goal, 
+                           family =binomial(link="logit"), 
+                           data = kickstarter_completed) 
+
+margins(logistic_regression, variables = "duration", type = "response")
+
+cplot(logistic_regression, "duration", what = "prediction")
+
+%>%
   summary()
+
+exp(logistic_regression$coefficients)
+
+coefplot(logistic_regression)
+
+## split data set
+set.seed(42)
+rows <- sample(nrow(kickstarter_completed))
+kickstarter_completed <- kickstarter_completed[rows, ]
+split <- round(nrow(kickstarter_completed) * .80)
+
+train <- kickstarter_completed[1:split, ]
+test <- kickstarter_completed[(split + 1):nrow(kickstarter_completed), ]
+
+model_1 <- glm(status_binary ~ duration, family =binomial(link="logit"), data = train)
+p <- predict(model_1, test, type = "response")
+test$predicted_success <- p
+
+head(p)
+# calculate errors
+error <- p - test[["status_binary"]]
+sqrt(mean(error^2))
+
+
+ggplot(test, aes(x = duration, y = predicted_success)) +
+  geom_point()
 
 
 # What's the ideal pledge goal?
@@ -71,8 +113,18 @@ avg_goal_successful <- mean(kickstarter_successful$goal)
 unique(kickstarter_completed$category)
 kickstarter_completed$category <- str_replace_all(kickstarter_completed$category, "Film &amp; Video", "Film & Video")
 
-logistic_simple2 <- glm(status_binary~category, family = "poisson", data = kickstarter_completed)
+library('magrittr')
+kickstarter_completed %<>%
+  mutate(category_factor = fct_lump(kickstarter_completed$location,6))
 
+model_2 <- glm(status_binary~category_factor, family =binomial(link="logit"), data = train)
+
+
+p2 <- predict(model_1, test)
+test$predicted_success_2 <- p2
+
+ggplot(test, aes(x = category, y = predicted_success_2)) +
+  geom_point()
 
 # Is there an ideal month/day/time to launch a campaign?
 
