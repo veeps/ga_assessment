@@ -6,6 +6,8 @@ library(ggplot2)
 library(stringr)
 library(useful)
 library(coefplot)
+library(magrittr)
+library(forcats)
 
 kickstarter <- read_csv("data/DSI_kickstarterscrape_dataset.csv",col_names =  TRUE)
 kickstarter <- kickstarter %>%
@@ -73,8 +75,6 @@ margins(logistic_regression, variables = "duration", type = "response")
 
 cplot(logistic_regression, "duration", what = "prediction")
 
-%>%
-  summary()
 
 exp(logistic_regression$coefficients)
 
@@ -113,17 +113,24 @@ avg_goal_successful <- mean(kickstarter_successful$goal)
 unique(kickstarter_completed$category)
 kickstarter_completed$category <- str_replace_all(kickstarter_completed$category, "Film &amp; Video", "Film & Video")
 
-library('magrittr')
 kickstarter_completed %<>%
-  mutate(category_factor = fct_lump(kickstarter_completed$location,6))
+  mutate(category_factor = fct_lump(kickstarter_completed$category,6))
+
+
+set.seed(42)
+rows <- sample(nrow(kickstarter_completed))
+kickstarter_completed <- kickstarter_completed[rows, ]
+split <- round(nrow(kickstarter_completed) * .80)
+
+train <- kickstarter_completed[1:split, ]
+test <- kickstarter_completed[(split + 1):nrow(kickstarter_completed), ]
 
 model_2 <- glm(status_binary~category_factor, family =binomial(link="logit"), data = train)
+p2 <- predict(model_2, test, type = "response")
+test$predicted_success_category <- p2
 
 
-p2 <- predict(model_1, test)
-test$predicted_success_2 <- p2
-
-ggplot(test, aes(x = category, y = predicted_success_2)) +
+ggplot(test, aes(x = category, y = predicted_success_category)) +
   geom_point()
 
 # Is there an ideal month/day/time to launch a campaign?
